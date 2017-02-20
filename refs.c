@@ -10,6 +10,7 @@
 #include "object.h"
 #include "tag.h"
 #include "submodule.h"
+#include "worktree.h"
 
 /*
  * List of all available backends
@@ -1230,7 +1231,7 @@ int for_each_rawref(each_ref_fn fn, void *cb_data)
 }
 
 /* This function needs to return a meaningful errno on failure */
-const char *resolve_ref_recursively(struct ref_store *refs,
+const char *refs_resolve_ref_unsafe(struct ref_store *refs,
 				    const char *refname,
 				    int resolve_flags,
 				    unsigned char *sha1, int *flags)
@@ -1317,8 +1318,9 @@ int refs_init_db(struct strbuf *err)
 const char *resolve_ref_unsafe(const char *refname, int resolve_flags,
 			       unsigned char *sha1, int *flags)
 {
-	return resolve_ref_recursively(get_main_ref_store(), refname,
-				       resolve_flags, sha1, flags);
+	return refs_resolve_ref_unsafe(get_main_ref_store(),
+				       refname, resolve_flags,
+				       sha1, flags);
 }
 
 int resolve_gitlink_ref(const char *submodule, const char *refname,
@@ -1347,7 +1349,7 @@ int resolve_gitlink_ref(const char *submodule, const char *refname,
 	if (!refs)
 		return -1;
 
-	if (!resolve_ref_recursively(refs, refname, 0, sha1, &flags) ||
+	if (!refs_resolve_ref_unsafe(refs, refname, 0, sha1, &flags) ||
 	    is_null_sha1(sha1))
 		return -1;
 	return 0;
@@ -1491,6 +1493,32 @@ struct ref_store *get_submodule_ref_store(const char *submodule)
 	return refs;
 }
 
+struct ref_store *get_worktree_ref_store(const struct worktree *wt)
+{
+	struct ref_store *refs;
+
+	if (wt->is_current)
+		return get_main_ref_store();
+
+	/*
+	 * We share the same hash map with submodules for
+	 * now. submodule paths are always relative (to topdir) while
+	 * worktree paths are always absolute. No chance of conflict.
+	 */
+	refs = lookup_submodule_ref_store(wt->path);
+	if (refs)
+		return refs;
+
+	if (wt->id)
+		refs = ref_store_init(git_common_path("worktrees/%s", wt->id));
+	else
+		refs = ref_store_init(get_git_common_dir());
+
+	if (refs)
+		register_submodule_ref_store(refs, wt->path);
+	return refs;
+}
+
 void base_ref_store_init(struct ref_store *refs,
 			 const struct ref_storage_be *be)
 {
@@ -1512,13 +1540,25 @@ int peel_ref(const char *refname, unsigned char *sha1)
 	return refs->be->peel_ref(refs, refname, sha1);
 }
 
-int create_symref(const char *ref_target, const char *refs_heads_master,
+int refs_create_symref(struct ref_store *refs,
+		       const char *ref_target,
+		       const char *refs_heads_master,
+		       const char *logmsg)
+{
+	return refs->be->create_symref(refs,
+				       ref_target,
+				       refs_heads_master,
+				       logmsg);
+}
+
+int create_symref(const char *ref_target,
+		  const char *refs_heads_master,
 		  const char *logmsg)
 {
-	struct ref_store *refs = get_main_ref_store();
-
-	return refs->be->create_symref(refs, ref_target, refs_heads_master,
-				       logmsg);
+	return refs_create_symref(get_main_ref_store(),
+				  ref_target,
+				  refs_heads_master,
+				  logmsg);
 }
 
 int ref_transaction_commit(struct ref_transaction *transaction,
