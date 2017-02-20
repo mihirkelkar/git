@@ -192,6 +192,7 @@ typedef int each_ref_fn(const char *refname,
  * stop the iteration.
  */
 int head_ref(each_ref_fn fn, void *cb_data);
+int other_head_refs(each_ref_fn fn, void *cb_data);
 int for_each_ref(each_ref_fn fn, void *cb_data);
 int for_each_ref_in(const char *prefix, each_ref_fn fn, void *cb_data);
 int for_each_fullref_in(const char *prefix, each_ref_fn fn, void *cb_data,
@@ -204,15 +205,6 @@ int for_each_glob_ref(each_ref_fn fn, const char *pattern, void *cb_data);
 int for_each_glob_ref_in(each_ref_fn fn, const char *pattern,
 			 const char *prefix, void *cb_data);
 
-int head_ref_submodule(const char *submodule, each_ref_fn fn, void *cb_data);
-int for_each_ref_submodule(const char *submodule,
-			   each_ref_fn fn, void *cb_data);
-int for_each_ref_in_submodule(const char *submodule, const char *prefix,
-		each_ref_fn fn, void *cb_data);
-int for_each_tag_ref_submodule(const char *submodule,
-			       each_ref_fn fn, void *cb_data);
-int for_each_branch_ref_submodule(const char *submodule,
-				  each_ref_fn fn, void *cb_data);
 int for_each_remote_ref_submodule(const char *submodule,
 				  each_ref_fn fn, void *cb_data);
 
@@ -570,5 +562,20 @@ int refs_create_symref(struct ref_store *refs,
 		       const char *refname,
 		       const char *target,
 		       const char *logmsg);
+int refs_read_ref_full(struct ref_store *refs,
+		       const char *refname, int resolve_flags,
+		       unsigned char *sha1, int *flags);
+int refs_read_ref(struct ref_store *refs,
+		  const char *refname, unsigned char *sha1);
+int refs_head_ref(struct ref_store *refs, each_ref_fn fn, void *cb_data);
+int refs_for_each_ref(struct ref_store *refs, each_ref_fn fn, void *cb_data);
+int refs_for_each_ref_in(struct ref_store *refs, const char *prefix,
+			 each_ref_fn fn, void *cb_data);
+int refs_for_each_tag_ref(struct ref_store *refs, each_ref_fn fn, void *cb_data);
+int refs_for_each_branch_ref(struct ref_store *refs, each_ref_fn fn, void *cb_data);
+int refs_for_each_remote_ref(struct ref_store *refs, each_ref_fn fn, void *cb_data);
+int refs_for_each_reflog(struct ref_store *refs, each_ref_fn fn, void *cb_data);
+int refs_for_each_reflog_ent(struct ref_store *refs, const char *refname,
+			     each_reflog_ent_fn fn, void *cb_data);
 
 #endif /* REFS_H */

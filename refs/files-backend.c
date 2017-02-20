@@ -3323,6 +3323,7 @@ struct files_reflog_iterator {
 	struct ref_iterator base;
 
 	struct dir_iterator *dir_iterator;
+	struct dir_iterator *dir_iterator2;
 	struct object_id oid;
 };
 
@@ -3343,6 +3344,10 @@ static int files_reflog_iterator_advance(struct ref_iterator *ref_iterator)
 		if (ends_with(diter->basename, ".lock"))
 			continue;
 
+		if (iter->dir_iterator2 &&
+		    starts_with(diter->relative_path, "refs/bisect/"))
+			continue;
+
 		if (read_ref_full(diter->relative_path, 0,
 				  iter->oid.hash, &flags)) {
 			error("bad ref for %s", diter->path.buf);
@@ -3355,7 +3360,11 @@ static int files_reflog_iterator_advance(struct ref_iterator *ref_iterator)
 		return ITER_OK;
 	}
 
-	iter->dir_iterator = NULL;
+	iter->dir_iterator = iter->dir_iterator2;
+	if (iter->dir_iterator2) {
+		iter->dir_iterator2 = NULL;
+		return files_reflog_iterator_advance(ref_iterator);
+	}
 	if (ref_iterator_abort(ref_iterator) == ITER_ERROR)
 		ok = ITER_ERROR;
 	return ok;
@@ -3375,6 +3384,12 @@ static int files_reflog_iterator_abort(struct ref_iterator *ref_iterator)
 
 	if (iter->dir_iterator)
 		ok = dir_iterator_abort(iter->dir_iterator);
+
+	if (iter->dir_iterator2) {
+		int ok2 = dir_iterator_abort(iter->dir_iterator2);
+		if (ok2 == ITER_ERROR)
+			ok = ok2;
+	}
 
 	base_ref_iterator_free(ref_iterator);
 	return ok;
@@ -3398,6 +3413,13 @@ static struct ref_iterator *files_reflog_iterator_begin(struct ref_store *ref_st
 	files_path(refs, &sb, "logs");
 	iter->dir_iterator = dir_iterator_begin(sb.buf);
 	strbuf_release(&sb);
+
+	if (strcmp(refs->gitdir.buf, refs->gitcommondir.buf)) {
+		strbuf_addf(&sb, "%s/logs", refs->gitdir.buf);
+		iter->dir_iterator2 = dir_iterator_begin(sb.buf);
+		strbuf_release(&sb);
+	}
+
 	return ref_iterator;
 }
 
